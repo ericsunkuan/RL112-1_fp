@@ -10,6 +10,7 @@ from stable_baselines3 import PPO
 Frame = np.ndarray
 from custom_cnn import CustomCNN
 import pickle
+import json
 #from image_classify import classify
 #from new_train import CustomCNN
 
@@ -33,6 +34,16 @@ class DoomEnv(Env):
             label = np.array(label)
             #print(label)
             self.lb.append(label)
+
+        prompt_file_path = '/Users/ericsunkuan/Desktop/NTUEE/112-1/RL/final_project/llm/second_prompt_action_with6.json'
+
+        # Read JSON data from the file
+        with open(prompt_file_path, 'r') as file:
+            data = json.load(file)
+        self.prompts = []
+        for dic in data:
+            self.prompts.append(dic["action_list"])
+
         '''
         self.possible_actions = get_available_actions(np.array([
              Button.MOVE_FORWARD, Button.MOVE_RIGHT, 
@@ -83,19 +94,16 @@ class DoomEnv(Env):
 
     def step(self, action: int,) -> t.Tuple[Frame, int, bool, t.Dict]:
         self.w+=1
-        if self.prompt_done >= 100000:
+        if self.prompt_done >= 5:
             self.prompt_done = -1
         elif self.prompt_done > -1:
             if self.game.get_state() is not None:
                 state = self.game.get_state()
                 label_goal = state.labels_buffer
-                
-                for i in range(100):
-                    print(np.sum(self.lb[i]))
-                target_label = 0
+                # for i in range(100):
+                #     print(np.sum(self.lb[i]))
                 target_label = self.classify(label_goal)
-                #target_prompt = self.prompts[target_label]
-                target_prompt = 0
+                target_prompt = self.prompts[target_label]
             prompt_r = self.prompt_reward(self.prompt_done,target_prompt,action)
             self.prompt_done += 1
             
@@ -111,11 +119,9 @@ class DoomEnv(Env):
                 if Imp_count > 0 :     ### if last prompt is evaluated and there is enemy in vision --> prompt
                     self.prompt_done = 0
                     label_goal = state.labels_buffer
-                    
                     target_label = self.classify(label_goal)
-                    target_label = 0
-                    #target_prompt = self.prompts[target_label]
-                    target_prompt = 0
+                    target_prompt = self.prompts[target_label]
+                    
                     
 
 
@@ -137,22 +143,17 @@ class DoomEnv(Env):
     def classify(self,label_goal):
         p = np.full(100, 10**6)
         p1 = th.full((100,), 10**6)
-        for i in range(label_goal.shape[0]):
-            for j in range(label_goal.shape[1]):
-                if(label_goal[i][j]<0 or label_goal[i][j]>1):
-                    label_goal[i][j] = 0
-            for i in range(100):
-        #     print(np.sum(labels[i]))
-                p[i]=np.sum(np.abs(label_goal,self.get_labels()[i]))
-                #lg = th.tensor(label_goal)
-                #p1[i] = th.sum(th.abs(lg-self.lb))
-                #p[i]=total_difference = sum(sum(abs(a - b) for a, b in zip(row1, row2)) for row1, row2 in zip(label_goal, self.get_labels()[i]))
-            #p[i] = total_absolute_difference(label_goal,labels[i])
-        p = th.tensor(p)
-        # print(p)
-        # print(p.argmin())
-        # print(p[p.argmin()])
-        return p1.argmin()    
+        # for i in range(label_goal.shape[0]):
+        #     for j in range(label_goal.shape[1]):
+        #         if(label_goal[i][j]<0 or label_goal[i][j]>1):
+        #             label_goal[i][j] = 0
+        label_goal[label_goal > 1] = 0
+        label_goal[label_goal < 0] = 0
+        for i in range(100):
+            #print(np.sum(labels[i]))
+            p[i]=np.sum(np.abs(label_goal-self.get_labels()[i]))
+                
+        return p.argmin()  
     
     def get_labels(self):
         return self.lb
